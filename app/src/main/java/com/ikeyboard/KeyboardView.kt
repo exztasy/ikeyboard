@@ -30,6 +30,8 @@ class KeyboardView(context: Context, private val listener: Listener) : View(cont
         fun onSpace()
         fun onReturn()
         fun onEmoji()
+        /** Globe key: switch to the next enabled keyboard language. */
+        fun onGlobe()
         fun onSwitchInputMethod()
         fun onCursorMove(dx: Int, dy: Int)
         fun onSuggestion(slot: Int)
@@ -60,6 +62,21 @@ class KeyboardView(context: Context, private val listener: Listener) : View(cont
     var returnLabel = "return"
         set(v) { field = v; invalidate() }
     var returnHighlighted = false
+        set(v) { field = v; invalidate() }
+
+    /**
+     * Letters shown as keys in place of the suggestion bar (the Lithuanian keyboard's ą č ę ė į š ų ū ž).
+     * When set, suggestions are hidden and holding a base letter offers these letters first.
+     */
+    var letterStrip: List<String>? = null
+        set(v) { field = v; invalidate() }
+
+    /** Shows the 🌐 language key in the bottom row (only when more than one language is enabled). */
+    var showGlobe = false
+        private set
+
+    /** Space bar caption: "space", or the language name when several languages are enabled. */
+    var spaceLabel = "space"
         set(v) { field = v; invalidate() }
 
     /** Three QuickType slots (left, centre, right); null = empty. */
@@ -143,14 +160,15 @@ class KeyboardView(context: Context, private val listener: Listener) : View(cont
 
     // ---- configuration ------------------------------------------------------------------------
 
-    fun configure(mode: Mode, variant: FieldVariant) {
+    fun configure(mode: Mode, variant: FieldVariant, globe: Boolean = false) {
         this.variant = variant
+        this.showGlobe = globe
         setMode(mode)
     }
 
     fun setMode(m: Mode) {
         mode = m
-        layout = Layouts.build(m, variant)
+        layout = Layouts.build(m, variant, showGlobe)
         layoutKeys()
         invalidate()
     }
@@ -224,7 +242,39 @@ class KeyboardView(context: Context, private val listener: Listener) : View(cont
 
     private fun isPressed(k: Key) = pointers.values.any { it.key === k && !it.trackpad }
 
+    /** The letter strip, unless a number pad is showing. */
+    private fun stripLetters(): List<String>? = letterStrip?.takeIf { !layout.isPad }
+
+    private fun stripCellWidth(n: Int) = (width - 2 * sideMargin) / n
+
+    private fun stripLetterIndex(x: Float, n: Int) = ((x - sideMargin) / stripCellWidth(n)).toInt().coerceIn(0, n - 1)
+
+    private fun drawLetterStrip(canvas: Canvas, letters: List<String>) {
+        if (trackpadActive) return
+        val h = stripHeight
+        val cellW = stripCellWidth(letters.size)
+        val pressed = pointers.values.firstOrNull { it.stripSlot >= 0 }?.stripSlot ?: -1
+        val upper = mode == Mode.LETTERS && shift != Shift.OFF
+        text.typeface = Typeface.DEFAULT
+        text.textSize = (if (landscape) 19f else 21f) * sp
+        for ((i, letter) in letters.withIndex()) {
+            val l = sideMargin + i * cellW
+            tmpRect.set(l + hGap / 2, 6 * dp, l + cellW - hGap / 2, h - 3 * dp)
+            fill.color = theme.keyShadow
+            canvas.save()
+            canvas.translate(0f, 1 * dp)
+            canvas.drawRoundRect(tmpRect, radius, radius, fill)
+            canvas.restore()
+            fill.color = if (i == pressed) theme.specialKey else theme.key
+            canvas.drawRoundRect(tmpRect, radius, radius, fill)
+            text.color = theme.text
+            val label = if (upper) letter.uppercase() else letter
+            canvas.drawText(label, tmpRect.centerX(), tmpRect.centerY() - (text.descent() + text.ascent()) / 2, text)
+        }
+    }
+
     private fun drawStrip(canvas: Canvas) {
+        stripLetters()?.let { drawLetterStrip(canvas, it); return }
         val h = stripHeight
         val slotW = width / 3f
         val pressedSlot = pointers.values.firstOrNull { it.stripSlot >= 0 }?.stripSlot ?: -1
@@ -322,7 +372,11 @@ class KeyboardView(context: Context, private val listener: Listener) : View(cont
                 }
             }
             KeyType.SPACE, KeyType.RETURN, KeyType.MODE_NUMBERS, KeyType.MODE_SYMBOLS, KeyType.MODE_LETTERS -> {
-                val label = if (k.type == KeyType.RETURN) returnLabel else k.label
+                val label = when (k.type) {
+                    KeyType.RETURN -> returnLabel
+                    KeyType.SPACE -> spaceLabel
+                    else -> k.label
+                }
                 text.typeface = Typeface.DEFAULT
                 text.textSize = 16f * sp
                 canvas.drawText(label, cx, cy - (text.descent() + text.ascent()) / 2, text)
@@ -330,8 +384,24 @@ class KeyboardView(context: Context, private val listener: Listener) : View(cont
             KeyType.SHIFT -> drawShift(canvas, cx, cy)
             KeyType.BACKSPACE -> drawBackspace(canvas, cx, cy, pressed)
             KeyType.EMOJI -> drawEmojiIcon(canvas, cx, cy)
+            KeyType.GLOBE -> drawGlobeIcon(canvas, cx, cy)
             KeyType.SPACER -> {}
         }
+    }
+
+    private fun drawGlobeIcon(canvas: Canvas, cx: Float, cy: Float) {
+        val r = 10.5f * dp
+        stroke.strokeWidth = 1.4f * dp
+        canvas.drawCircle(cx, cy, r, stroke)
+        // Meridian ellipse and three parallels.
+        tmpRect.set(cx - r * 0.45f, cy - r, cx + r * 0.45f, cy + r)
+        canvas.drawOval(tmpRect, stroke)
+        canvas.drawLine(cx, cy - r, cx, cy + r, stroke)
+        canvas.drawLine(cx - r, cy, cx + r, cy, stroke)
+        val dy = r * 0.5f
+        val dx = r * 0.866f
+        canvas.drawLine(cx - dx, cy - dy, cx + dx, cy - dy, stroke)
+        canvas.drawLine(cx - dx, cy + dy, cx + dx, cy + dy, stroke)
     }
 
     private fun drawPadKey(canvas: Canvas, k: Key) {
@@ -547,6 +617,12 @@ class KeyboardView(context: Context, private val listener: Listener) : View(cont
         pointers[id] = p
 
         if (y < stripHeight) {
+            val letters = stripLetters()
+            if (letters != null) {
+                p.stripSlot = stripLetterIndex(x, letters.size)
+                listener.onFeedback(FeedbackKind.KEY)
+                return
+            }
             if (suggestions.getOrNull((x / (width / 3f)).toInt().coerceIn(0, 2)) != null) {
                 p.stripSlot = (x / (width / 3f)).toInt().coerceIn(0, 2)
             }
@@ -593,7 +669,7 @@ class KeyboardView(context: Context, private val listener: Listener) : View(cont
                 listener.onFeedback(if (k.type == KeyType.SPACE) FeedbackKind.SPACE else FeedbackKind.KEY)
                 handler.postDelayed(longPressRunnable, if (k.type == KeyType.SPACE) 380 else 400)
             }
-            KeyType.EMOJI -> {
+            KeyType.EMOJI, KeyType.GLOBE -> {
                 listener.onFeedback(FeedbackKind.MODIFIER)
                 handler.postDelayed(longPressRunnable, 450)
             }
@@ -653,7 +729,15 @@ class KeyboardView(context: Context, private val listener: Listener) : View(cont
             return
         }
         if (p.stripSlot >= 0) {
-            if (y < stripHeight + 10 * dp) listener.onSuggestion(p.stripSlot)
+            val letters = stripLetters()
+            if (letters != null) {
+                val upper = mode == Mode.LETTERS && shift != Shift.OFF
+                val letter = letters[p.stripSlot.coerceIn(0, letters.size - 1)]
+                listener.onText(if (upper) letter.uppercase() else letter, mode)
+                afterCharCommitted(p)
+            } else if (y < stripHeight + 10 * dp) {
+                listener.onSuggestion(p.stripSlot)
+            }
             return
         }
         p.popup?.let { pop ->
@@ -670,6 +754,7 @@ class KeyboardView(context: Context, private val listener: Listener) : View(cont
             KeyType.SHIFT -> finishShiftHold(p)
             KeyType.MODE_NUMBERS, KeyType.MODE_SYMBOLS, KeyType.MODE_LETTERS -> {}
             KeyType.EMOJI -> listener.onEmoji()
+            KeyType.GLOBE -> listener.onGlobe()
             KeyType.BACKSPACE -> {}
             else -> {
                 // Slid off the mode key onto a symbol: type it and go back, like iOS.
@@ -731,14 +816,14 @@ class KeyboardView(context: Context, private val listener: Listener) : View(cont
                 trackpadActive = true
                 listener.onFeedback(FeedbackKind.MODIFIER)
             }
-            KeyType.EMOJI -> {
+            KeyType.EMOJI, KeyType.GLOBE -> {
                 p.handled = true
                 listener.onSwitchInputMethod()
             }
             KeyType.CHAR -> {
                 val upper = mode == Mode.LETTERS && shift != Shift.OFF
                 val items = if (layout.isPad) k.alternates else {
-                    val alts = Layouts.alternatesFor(k.label, upper)
+                    val alts = Layouts.alternatesFor(k.label, upper, letterStrip != null)
                     if (alts.isEmpty()) return
                     if (mode == Mode.LETTERS) alts else listOf(if (upper) k.output.uppercase() else k.output) + alts
                 }

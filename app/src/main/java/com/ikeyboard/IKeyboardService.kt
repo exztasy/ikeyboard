@@ -98,6 +98,11 @@ class IKeyboardService : InputMethodService(), KeyboardView.Listener, EmojiView.
     override fun onStartInputView(info: EditorInfo, restarting: Boolean) {
         super.onStartInputView(info, restarting)
         prefs = Prefs(this) // pick up changes made in the settings process
+        setupForField(info)
+    }
+
+    /** Configures layout, language and typing aids for the field being edited. */
+    private fun setupForField(info: EditorInfo) {
         applyTheme()
         dictionary?.setUserWords(prefs.userWords)
         keyboard.reset()
@@ -128,10 +133,20 @@ class IKeyboardService : InputMethodService(), KeyboardView.Listener, EmojiView.
             InputType.TYPE_CLASS_DATETIME -> Mode.NUMBERS
             else -> Mode.LETTERS
         }
+        // Keyboard language. The word list is English-only, so the Lithuanian keyboard swaps the
+        // suggestion bar for its letters and skips suggestions / auto-correct.
+        val languages = prefs.enabledLanguages
+        val language = prefs.currentLanguage.takeIf { it in languages } ?: languages.first()
+        val lithuanian = language == Prefs.LITHUANIAN
+        val multiLanguage = languages.size > 1
+        keyboard.letterStrip = if (lithuanian && isText) Layouts.LITHUANIAN_LETTERS else null
+        keyboard.spaceLabel = if (multiLanguage) Prefs.languageName(language) else "space"
+
         val plainText = isText && !password && !email && !url
         val noSuggestionFlag = flags and InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS != 0
-        suggestionsAllowed = plainText && !noSuggestionFlag && variation != InputType.TYPE_TEXT_VARIATION_FILTER
-        autoCorrectAllowed = plainText && prefs.autoCorrect && !noSuggestionFlag &&
+        suggestionsAllowed = plainText && !lithuanian && !noSuggestionFlag &&
+            variation != InputType.TYPE_TEXT_VARIATION_FILTER
+        autoCorrectAllowed = plainText && !lithuanian && prefs.autoCorrect && !noSuggestionFlag &&
             variation != InputType.TYPE_TEXT_VARIATION_PERSON_NAME
         autoCapAllowed = plainText && prefs.autoCapitalize
         capModes = when {
@@ -160,7 +175,7 @@ class IKeyboardService : InputMethodService(), KeyboardView.Listener, EmojiView.
         keyboard.returnLabel = info.actionLabel?.toString()?.lowercase()?.takeIf { enterAction != EditorInfo.IME_ACTION_NONE } ?: label
         keyboard.returnHighlighted = blue
 
-        keyboard.configure(mode, variant)
+        keyboard.configure(mode, variant, globe = multiLanguage)
         keyboard.setShift(KeyboardView.Shift.OFF)
         lastCorrection = null
         justPickedSuggestion = false
@@ -402,6 +417,14 @@ class IKeyboardService : InputMethodService(), KeyboardView.Listener, EmojiView.
         if (!::emoji.isInitialized) return
         emoji.visibility = View.GONE
         keyboard.visibility = View.VISIBLE
+    }
+
+    override fun onGlobe() {
+        val languages = prefs.enabledLanguages
+        if (languages.size < 2) return
+        val i = languages.indexOf(prefs.currentLanguage)
+        prefs.currentLanguage = languages[(i + 1) % languages.size]
+        currentInputEditorInfo?.let { setupForField(it) }
     }
 
     override fun onSwitchInputMethod() {

@@ -78,6 +78,33 @@ class SettingsActivity : Activity() {
             }
         }
 
+        section(
+            "KEYBOARDS",
+            "With both on, tap the 🌐 key to switch. The Lithuanian keyboard shows ą č ę ė į š ų ū ž " +
+                "above the keys in place of suggestions.",
+        ) { group ->
+            lateinit var en: Switch
+            lateinit var lt: Switch
+            fun keepOne(sw: Switch, other: Switch, checked: Boolean): Boolean {
+                if (!checked && !other.isChecked) {
+                    sw.isChecked = true
+                    android.widget.Toast.makeText(this, "Keep at least one keyboard on", android.widget.Toast.LENGTH_SHORT).show()
+                    return false
+                }
+                return true
+            }
+            en = toggle(group, "English", prefs.langEnglish) { v ->
+                if (keepOne(en, lt, v)) prefs.langEnglish = v
+            }
+            lt = toggle(group, "Lietuvių (Lithuanian)", prefs.langLithuanian) { v ->
+                if (keepOne(lt, en, v)) {
+                    prefs.langLithuanian = v
+                    // Turning Lithuanian on switches to it straight away.
+                    if (v) prefs.currentLanguage = Prefs.LITHUANIAN
+                }
+            }
+        }
+
         section("TRY IT", "Return adds a line in the notes box and submits the single-line field.") { group ->
             fun styled(e: EditText) = e.apply {
                 background = null
@@ -256,7 +283,7 @@ class SettingsActivity : Activity() {
         return status
     }
 
-    private fun toggle(group: LinearLayout, label: String, value: Boolean, onChange: (Boolean) -> Unit) {
+    private fun toggle(group: LinearLayout, label: String, value: Boolean, onChange: (Boolean) -> Unit): Switch {
         val r = row(group, label)
         val sw = Switch(this).apply {
             isChecked = value
@@ -267,5 +294,6 @@ class SettingsActivity : Activity() {
         }
         r.addView(sw)
         r.setOnClickListener { sw.toggle() }
+        return sw
     }
 }

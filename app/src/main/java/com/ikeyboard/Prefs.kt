@@ -23,6 +23,21 @@ class Prefs(context: Context) {
     var sound by bool("sound", true)
     var haptics by bool("haptics", false)
 
+    var langEnglish by bool("lang_en", true)
+    var langLithuanian by bool("lang_lt", false)
+
+    /** Enabled keyboard languages in globe-key order; never empty. */
+    val enabledLanguages: List<String>
+        get() = buildList {
+            if (langEnglish) add(ENGLISH)
+            if (langLithuanian) add(LITHUANIAN)
+        }.ifEmpty { listOf(ENGLISH) }
+
+    /** Language the keyboard is currently typing in (changed with the globe key). */
+    var currentLanguage: String
+        get() = sp.getString("current_lang", ENGLISH) ?: ENGLISH
+        set(v) = sp.edit().putString("current_lang", v).apply()
+
     /** 0 = follow system, 1 = light, 2 = dark */
     var theme: Int
         get() = sp.getInt("theme", 0)
@@ -35,6 +50,16 @@ class Prefs(context: Context) {
     var recentEmoji: List<String>
         get() = sp.getString("recent_emoji", "")!!.split('\u0001').filter { it.isNotEmpty() }
         set(v) = sp.edit().putString("recent_emoji", v.joinToString("\u0001")).apply()
+
+    companion object {
+        const val ENGLISH = "en"
+        const val LITHUANIAN = "lt"
+
+        fun languageName(code: String) = when (code) {
+            LITHUANIAN -> "Lietuvių"
+            else -> "English"
+        }
+    }
 
     private fun bool(key: String, def: Boolean) = object : kotlin.properties.ReadWriteProperty<Any?, Boolean> {
         override fun getValue(thisRef: Any?, property: kotlin.reflect.KProperty<*>) = sp.getBoolean(key, def)

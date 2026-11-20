@@ -32,6 +32,11 @@ and draws everything itself on a Canvas, with no AndroidX or third-party runtime
   "Frequently Used" section.
 - Optional key-click sound (muted when the phone is on silent or vibrate) and optional haptics.
 - Touch and hold the emoji key to switch to a different keyboard.
+- **Lithuanian keyboard**: turn it on under Keyboards in settings. The suggestion bar is replaced by a
+  row of ą č ę ė į š ų ū ž keys, which follow shift and caps lock. Holding a, c, e, i, s, u or z also
+  offers its Lithuanian letters first. Suggestions and auto-correct are off in Lithuanian, because the
+  word list is English. With English and Lithuanian both on, a 🌐 key switches between them and the
+  space bar shows the current language.
 
 ## Build
 

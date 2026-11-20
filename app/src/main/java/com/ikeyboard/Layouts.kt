@@ -2,7 +2,7 @@ package com.ikeyboard
 
 import android.graphics.RectF
 
-enum class KeyType { CHAR, SHIFT, BACKSPACE, MODE_NUMBERS, MODE_SYMBOLS, MODE_LETTERS, EMOJI, SPACE, RETURN, SPACER }
+enum class KeyType { CHAR, SHIFT, BACKSPACE, MODE_NUMBERS, MODE_SYMBOLS, MODE_LETTERS, EMOJI, GLOBE, SPACE, RETURN, SPACER }
 
 class Key(
     val type: KeyType,
@@ -35,8 +35,19 @@ object Layouts {
         "'" to "’ ‘ ‚ `", "%" to "‰", "=" to "≠ ≈", "@" to "", ".com" to ".net .org .edu .co .io",
     ).mapValues { (_, v) -> v.split(' ').filter { it.isNotEmpty() } }
 
-    fun alternatesFor(label: String, upper: Boolean): List<String> {
-        val list = ALTERNATES[label.lowercase()] ?: return emptyList()
+    /** The Lithuanian letters, shown in the strip above the keys on the Lithuanian keyboard. */
+    val LITHUANIAN_LETTERS = listOf("ą", "č", "ę", "ė", "į", "š", "ų", "ū", "ž")
+
+    private val LITHUANIAN_ALTERNATES = mapOf(
+        "a" to listOf("ą"), "c" to listOf("č"), "e" to listOf("ę", "ė"), "i" to listOf("į"),
+        "s" to listOf("š"), "u" to listOf("ų", "ū"), "z" to listOf("ž"),
+    )
+
+    /** Long-press menu for [label]; on the Lithuanian keyboard its letters come first. */
+    fun alternatesFor(label: String, upper: Boolean, lithuanian: Boolean = false): List<String> {
+        val base = ALTERNATES[label.lowercase()] ?: emptyList()
+        val lt = if (lithuanian) LITHUANIAN_ALTERNATES[label.lowercase()] ?: emptyList() else emptyList()
+        val list = (lt + base).distinct()
         return if (upper) list.map { it.uppercase() } else list
     }
 
@@ -45,31 +56,35 @@ object Layouts {
 
     private fun spacer(w: Float) = Key(KeyType.SPACER, width = w)
 
-    private fun bottomRow(modeKey: Key, variant: FieldVariant): List<Key> {
-        val emoji = Key(KeyType.EMOJI, width = 1.25f)
+    /** Bottom row; with [globe] a language-switch key is added and the other keys give up room for it. */
+    private fun bottomRow(modeKey: Key, variant: FieldVariant, globe: Boolean): List<Key> {
+        val g = if (globe) listOf(Key(KeyType.GLOBE, width = if (variant == FieldVariant.TEXT) 1.25f else 1f)) else emptyList()
+        val emoji = Key(KeyType.EMOJI, width = if (globe && variant != FieldVariant.TEXT) 1f else 1.25f)
         val ret = Key(KeyType.RETURN, "return", width = 2.5f)
         return when (variant) {
-            FieldVariant.TEXT -> listOf(modeKey, emoji, Key(KeyType.SPACE, "space", " ", 5f), ret)
-            FieldVariant.EMAIL -> listOf(
-                modeKey, emoji, Key(KeyType.SPACE, "space", " ", 3f),
-                Key(KeyType.CHAR, "@", "@", 1.25f), Key(KeyType.CHAR, ".", ".", 1.25f, ALTERNATES["."]!!),
+            FieldVariant.TEXT -> listOf(modeKey) + g + listOf(emoji, Key(KeyType.SPACE, "space", " ", if (globe) 3.75f else 5f), ret)
+            FieldVariant.EMAIL -> listOf(modeKey) + g + listOf(
+                emoji, Key(KeyType.SPACE, "space", " ", if (globe) 2.5f else 3f),
+                Key(KeyType.CHAR, "@", "@", 1.25f),
+                Key(KeyType.CHAR, ".", ".", if (globe) 1f else 1.25f, ALTERNATES["."]!!),
                 Key(KeyType.RETURN, "return", width = 2f),
             )
-            FieldVariant.URL -> listOf(
-                modeKey, emoji, Key(KeyType.CHAR, ".", ".", 1.5f, ALTERNATES["."]!!),
-                Key(KeyType.CHAR, "/", "/", 1.5f), Key(KeyType.CHAR, ".com", ".com", 2f, ALTERNATES[".com"]!!), ret,
+            FieldVariant.URL -> listOf(modeKey) + g + listOf(
+                emoji, Key(KeyType.CHAR, ".", ".", if (globe) 1.25f else 1.5f, ALTERNATES["."]!!),
+                Key(KeyType.CHAR, "/", "/", if (globe) 1.25f else 1.5f),
+                Key(KeyType.CHAR, ".com", ".com", if (globe) 1.75f else 2f, ALTERNATES[".com"]!!), ret,
             )
         }
     }
 
-    fun build(mode: Mode, variant: FieldVariant): KeyboardLayout = when (mode) {
+    fun build(mode: Mode, variant: FieldVariant, globe: Boolean = false): KeyboardLayout = when (mode) {
         Mode.LETTERS -> KeyboardLayout(
             listOf(
                 chars("q w e r t y u i o p"),
                 listOf(spacer(0.5f)) + chars("a s d f g h j k l") + spacer(0.5f),
                 listOf(Key(KeyType.SHIFT, width = 1.3f), spacer(0.2f)) + chars("z x c v b n m") +
                     listOf(spacer(0.2f), Key(KeyType.BACKSPACE, width = 1.3f)),
-                bottomRow(Key(KeyType.MODE_NUMBERS, "123", width = 1.25f), variant),
+                bottomRow(Key(KeyType.MODE_NUMBERS, "123", width = 1.25f), variant, globe),
             ), 10f,
         )
         Mode.NUMBERS -> KeyboardLayout(
@@ -78,7 +93,7 @@ object Layouts {
                 chars("- / : ; ( ) $ & @ \""),
                 listOf(Key(KeyType.MODE_SYMBOLS, "#+=", width = 1.3f), spacer(0.2f)) + chars(". , ? ! '", 1.4f) +
                     listOf(spacer(0.2f), Key(KeyType.BACKSPACE, width = 1.3f)),
-                bottomRow(Key(KeyType.MODE_LETTERS, "ABC", width = 1.25f), variant),
+                bottomRow(Key(KeyType.MODE_LETTERS, "ABC", width = 1.25f), variant, globe),
             ), 10f,
         )
         Mode.SYMBOLS -> KeyboardLayout(
@@ -87,7 +102,7 @@ object Layouts {
                 chars("_ \\ | ~ < > € £ ¥ •"),
                 listOf(Key(KeyType.MODE_NUMBERS, "123", width = 1.3f), spacer(0.2f)) + chars(". , ? ! '", 1.4f) +
                     listOf(spacer(0.2f), Key(KeyType.BACKSPACE, width = 1.3f)),
-                bottomRow(Key(KeyType.MODE_LETTERS, "ABC", width = 1.25f), variant),
+                bottomRow(Key(KeyType.MODE_LETTERS, "ABC", width = 1.25f), variant, globe),
             ), 10f,
         )
         Mode.PHONE, Mode.NUMBER_PAD -> {
