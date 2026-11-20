@@ -70,21 +70,34 @@ class IKeyboardService : InputMethodService(), KeyboardView.Listener, EmojiView.
         val frame = FrameLayout(this)
         frame.addView(keyboard, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
         frame.addView(emoji, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
+        // Keep the keys clear of the navigation / gesture bar. The window can receive its insets before
+        // this view is attached (e.g. the first time the keyboard opens after a reboot), in which case
+        // the listener would never run and the bottom row would sit under the gesture bar; so insets
+        // are re-requested whenever the view is attached or the keyboard is shown.
         frame.setOnApplyWindowInsetsListener { v, insets ->
             val bottom = if (Build.VERSION.SDK_INT >= 30) {
                 insets.getInsets(WindowInsets.Type.navigationBars()).bottom
             } else {
                 @Suppress("DEPRECATION") insets.systemWindowInsetBottom
             }
-            v.setPadding(0, 0, 0, bottom)
+            if (v.paddingBottom != bottom) v.setPadding(0, 0, 0, bottom)
             insets
         }
+        frame.addOnAttachStateChangeListener(object : View.OnAttachStateChangeListener {
+            override fun onViewAttachedToWindow(v: View) = v.requestApplyInsets()
+            override fun onViewDetachedFromWindow(v: View) {}
+        })
         root = frame
         applyTheme()
         return frame
     }
 
     override fun onEvaluateFullscreenMode(): Boolean = false
+
+    override fun onWindowShown() {
+        super.onWindowShown()
+        root?.requestApplyInsets()
+    }
 
     private fun applyTheme() {
         theme = KeyboardTheme.resolve(this, prefs.theme)
