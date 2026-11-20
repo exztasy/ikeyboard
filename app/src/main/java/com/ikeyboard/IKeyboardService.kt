@@ -76,7 +76,16 @@ class IKeyboardService : InputMethodService(), KeyboardView.Listener, EmojiView.
         // are re-requested whenever the view is attached or the keyboard is shown.
         frame.setOnApplyWindowInsetsListener { v, insets ->
             val bottom = if (Build.VERSION.SDK_INT >= 30) {
-                insets.getInsets(WindowInsets.Type.navigationBars()).bottom
+                // Not just navigationBars(): while Android draws the IME navigation strip (the
+                // hide-keyboard chevron / keyboard switcher), it reports that strip to the IME
+                // window as captionBar() insets, and navigationBars() can then be 0. systemBars()
+                // covers both. This mirrors how the framework sizes that strip in
+                // InputMethodService's NavigationBarController.getSystemInsets().
+                val types = WindowInsets.Type.systemBars() or WindowInsets.Type.displayCutout()
+                minOf(
+                    insets.getInsets(types).bottom,
+                    insets.getInsetsIgnoringVisibility(WindowInsets.Type.systemBars()).bottom,
+                )
             } else {
                 @Suppress("DEPRECATION") insets.systemWindowInsetBottom
             }
