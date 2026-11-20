@@ -1,0 +1,9 @@
+<resources>
+    <color name="grouped_bg">#F2F2F7</color>
+    <color name="cell_bg">#FFFFFF</color>
+    <color name="label">#000000</color>
+    <color name="secondary_label">#6D6D72</color>
+    <color name="separator">#C6C6C8</color>
+    <color name="tint">#007AFF</color>
+    <color name="ic_bg">#FFFFFF</color>
+</resources>
