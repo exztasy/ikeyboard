@@ -96,6 +96,7 @@ class IKeyboardService : InputMethodService(), KeyboardView.Listener, EmojiView.
 
     override fun onStartInputView(info: EditorInfo, restarting: Boolean) {
         super.onStartInputView(info, restarting)
+        prefs = Prefs(this) // pick up changes made in the settings process
         applyTheme()
         dictionary?.setUserWords(prefs.userWords)
         keyboard.reset()

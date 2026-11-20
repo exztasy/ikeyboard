@@ -90,14 +90,13 @@ class EmojiView(context: Context, private val listener: Listener) : View(context
     fun reload(recents: List<String>) {
         val list = mutableListOf<Section>()
         val rec = recents.filter { emojiPaint.hasGlyph(it) }
-        list.add(Section("FREQUENTLY USED", "🕘", rec))
+        // "Frequently Used" only appears once there's history, so a first run opens on smileys.
+        if (rec.isNotEmpty()) list.add(Section("FREQUENTLY USED", "🕘", rec))
         categories.forEach { list.add(Section(it.title, it.icon, it.emoji)) }
         sections = list
         scrollPos = 0f
         scroller.forceFinished(true)
-        // Start on smileys when there's no history yet, like a first-run iPhone.
         relayout()
-        if (rec.isEmpty() && sections.size > 1) scrollPos = sections[1].startX
         invalidate()
     }
 
@@ -161,9 +160,6 @@ class EmojiView(context: Context, private val listener: Listener) : View(context
             canvas.drawText(s.title, tx, titleH - 10 * dp, text)
 
             if (s.emoji.isEmpty()) {
-                text.typeface = Typeface.DEFAULT
-                text.textSize = 14f * sp
-                canvas.drawText("Emoji you use will appear here.", sx, gridTop + cell, text)
                 continue
             }
             for ((i, e) in s.emoji.withIndex()) {

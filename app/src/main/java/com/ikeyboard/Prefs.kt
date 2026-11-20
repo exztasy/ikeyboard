@@ -3,9 +3,16 @@ package com.ikeyboard
 import android.content.Context
 import android.content.SharedPreferences
 
-/** Thin wrapper over SharedPreferences holding every user-facing setting. */
+/**
+ * Thin wrapper over SharedPreferences holding every user-facing setting.
+ *
+ * The settings screen runs in its own process (so its "Try it" field can't deadlock against the IME's
+ * synchronous InputConnection calls), so the file is opened in multi-process mode and re-read on each
+ * new [Prefs] instance.
+ */
 class Prefs(context: Context) {
-    val sp: SharedPreferences = context.getSharedPreferences("ikeyboard", Context.MODE_PRIVATE)
+    @Suppress("DEPRECATION")
+    val sp: SharedPreferences = context.getSharedPreferences("ikeyboard", Context.MODE_MULTI_PROCESS)
 
     var autoCapitalize by bool("auto_cap", true)
     var autoCorrect by bool("auto_correct", true)
