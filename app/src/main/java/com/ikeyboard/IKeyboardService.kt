@@ -35,6 +35,7 @@ class IKeyboardService : InputMethodService(), KeyboardView.Listener, EmojiView.
     private var autoCapAllowed = true
     private var capModes = TextUtils.CAP_MODE_SENTENCES
     private var enterAction = EditorInfo.IME_ACTION_NONE
+    private var multiLineField = false
 
     // Typing session state.
     private class Correction(val original: String, val replacement: String, val separator: String)
@@ -141,9 +142,11 @@ class IKeyboardService : InputMethodService(), KeyboardView.Listener, EmojiView.
         }
 
         // Return key: label and blue tint follow the field's action, like iOS.
-        val multiLine = isText && flags and InputType.TYPE_TEXT_FLAG_MULTI_LINE != 0
+        // Multi-line TextViews set IME_FLAG_NO_ENTER_ACTION themselves when they want newlines, so the
+        // flag (not the multi-line bit) decides; chat boxes can be multi-line and still ask for "send".
+        multiLineField = isText && flags and InputType.TYPE_TEXT_FLAG_MULTI_LINE != 0
         val noEnterAction = info.imeOptions and EditorInfo.IME_FLAG_NO_ENTER_ACTION != 0
-        enterAction = if (multiLine || noEnterAction) EditorInfo.IME_ACTION_NONE
+        enterAction = if (noEnterAction) EditorInfo.IME_ACTION_NONE
         else info.imeOptions and EditorInfo.IME_MASK_ACTION
         val (label, blue) = when (enterAction) {
             EditorInfo.IME_ACTION_GO -> "go" to true
@@ -365,16 +368,26 @@ class IKeyboardService : InputMethodService(), KeyboardView.Listener, EmojiView.
         val ic = currentInputConnection ?: return
         justPickedSuggestion = false
         lastSpaceTime = 0
-        if (enterAction != EditorInfo.IME_ACTION_NONE && enterAction != EditorInfo.IME_ACTION_UNSPECIFIED) {
-            autoCorrect("")
-            ic.performEditorAction(enterAction)
-        } else if (currentInputEditorInfo?.inputType == InputType.TYPE_NULL) {
-            sendDownUpKeyEvents(KeyEvent.KEYCODE_ENTER)
-        } else {
-            ic.beginBatchEdit()
-            autoCorrect("\n")
-            ic.commitText("\n", 1)
-            ic.endBatchEdit()
+        when {
+            // The field asked for a specific action (go, search, send, done, next…): perform it.
+            enterAction != EditorInfo.IME_ACTION_NONE && enterAction != EditorInfo.IME_ACTION_UNSPECIFIED -> {
+                autoCorrect("")
+                ic.performEditorAction(enterAction)
+            }
+            // A text area that wants line breaks.
+            multiLineField -> {
+                ic.beginBatchEdit()
+                autoCorrect("\n")
+                ic.commitText("\n", 1)
+                ic.endBatchEdit()
+            }
+            // Single-line field without an explicit action: send a real Enter key and let the editor
+            // decide. TextView fires its default action / moves focus, and web pages and Compose submit,
+            // whereas committing "\n" text would insert a stray line break in many of them.
+            else -> {
+                autoCorrect("")
+                sendDownUpKeyEvents(KeyEvent.KEYCODE_ENTER)
+            }
         }
     }
 

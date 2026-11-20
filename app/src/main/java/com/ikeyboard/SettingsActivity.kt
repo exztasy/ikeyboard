@@ -8,6 +8,7 @@ import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
 import android.os.Bundle
 import android.provider.Settings
+import android.text.InputType
 import android.util.TypedValue
 import android.view.Gravity
 import android.view.View
@@ -77,18 +78,35 @@ class SettingsActivity : Activity() {
             }
         }
 
-        section("TRY IT", null) { group ->
-            val field = EditText(this).apply {
-                hint = "Type something…"
+        section("TRY IT", "Return adds a line in the notes box and submits the single-line field.") { group ->
+            fun styled(e: EditText) = e.apply {
                 background = null
                 setTextColor(color(R.color.label))
                 setHintTextColor(color(R.color.secondary_label))
                 setTextSize(TypedValue.COMPLEX_UNIT_SP, 17f)
-                minHeight = (88 * dp).toInt()
-                gravity = Gravity.TOP
                 setPadding((16 * dp).toInt(), (12 * dp).toInt(), (16 * dp).toInt(), (12 * dp).toInt())
             }
-            group.addView(field)
+            group.addView(styled(EditText(this)).apply {
+                hint = "Notes (multi-line)…"
+                inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_CAP_SENTENCES or
+                    InputType.TYPE_TEXT_FLAG_MULTI_LINE
+                minHeight = (88 * dp).toInt()
+                gravity = Gravity.TOP
+            })
+            group.addView(View(this).apply { setBackgroundColor(color(R.color.separator)) },
+                LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, maxOf(1, (0.5f * dp).toInt())).apply {
+                    marginStart = (16 * dp).toInt()
+                })
+            group.addView(styled(EditText(this)).apply {
+                hint = "Single-line field"
+                inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_CAP_SENTENCES
+                isSingleLine = true
+                setOnEditorActionListener { v, _, _ ->
+                    android.widget.Toast.makeText(this@SettingsActivity, "Submitted: ${v.text}", android.widget.Toast.LENGTH_SHORT).show()
+                    v.text = null
+                    true
+                }
+            })
         }
 
         section("ALL KEYBOARDS", null) {
